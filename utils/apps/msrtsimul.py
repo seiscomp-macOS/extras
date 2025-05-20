@@ -107,19 +107,19 @@ def rt_simul(f, speed=1.0, jump=0.0, delaydict=None):
 # ------------------------------------------------------------------------------
 def usage():
     print(
-        """Usage:
-  msrtsimul [options] file
+        f"""Usage:
+  {os.path.basename(__file__)} [options] file
 
 miniSEED real-time playback and simulation
 
-msrtsimul reads sorted (and possibly multiplexed) miniSEED files and writes
-individual records in pseudo-real-time. This is useful e.g. for testing and
+{os.path.basename(__file__)} reads sorted (and possibly multiplexed) miniSEED files and
+writes individual records in pseudo-real-time. This is useful e.g. for testing and
 simulating data acquisition. Output is
 $SEISCOMP_ROOT/var/run/seedlink/mseedfifo unless --seedlink or -c is used.
 
 Verbosity:
-  -h, --help            Display this help message
-  -v, --verbose         Verbose mode
+  -h, --help            Display this help message.
+  -v, --verbose         Verbose mode.
 
 Playback:
   -j, --jump            Minutes to skip (float).
@@ -131,14 +131,15 @@ Playback:
   -m  --mode            Choose between 'realtime' and 'historic'.
   -s, --speed           Speed factor (float).
       --test            Test mode.
-  -u, --unlimited       Allow miniSEED records which are not 512 bytes
+  -u, --unlimited       Allow miniSEED records which are not 512 bytes. By default
+                        seedlink supports 512 bytes only.
 
 Examples:
 Play back miniSEED waveforms in real time with verbose output
-  msrtsimul -v data.mseed
+  {os.path.basename(__file__)} -v data.mseed
 
 Play back miniSEED waveforms in real time skipping the first 1.5 minutes
-  msrtsimul -j 1.5 data.mseed
+  {os.path.basename(__file__)} -j 1.5 data.mseed
 """
     )
 
@@ -170,7 +171,7 @@ def main():
                 "help",
                 "mode=",
                 "seedlink=",
-                "unlimited"
+                "unlimited",
             ],
         )
     except GetoptError:

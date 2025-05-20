@@ -54,7 +54,7 @@ etc. will run with current system time. The historic mode allows to process wave
 with the stream inventory valid at the time when the data were recorded including
 streams closed at current time.
 
-.. warning ::
+.. warning::
 
    When repeating historic playbacks, the waveforms are fed multiple times to the
    seedlink buffer and the resulting picks are also repeated with the same pick
@@ -94,7 +94,7 @@ Examples
 
    .. code-block:: sh
 
-      $ msrtsimul -v miniSEED-file
+      msrtsimul -v miniSEED-file
 
 #. Playback miniSEED waveforms in historic mode. This may require :ref:`scautopick`
    to be started with the option *playback*:

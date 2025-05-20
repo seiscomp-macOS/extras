@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <seiscomp>
-	<module name="msrtsimul" category="Acquisition">
+	<module name="msrtsimul" category="Acquisition" standalone="true">
 		<description>MiniSEED real time playback and simulation</description>
 		<command-line>
 			<synopsis>
 				msrtsimul [OPTION] miniSEED-file
 			</synopsis>
 			<group name="Verbosity">
-				<option flag="h" long-flag="help" argument="" unit="">
+				<option flag="h" long-flag="help" argument="">
 					<description>
 					Display this help message.
 					</description>
 				</option>
-				<option flag="v" long-flag="verbose" argument="" unit="">
+				<option flag="v" long-flag="verbose" argument="">
 					<description>
 					Verbose mode.
 					</description>
@@ -35,7 +35,7 @@
 					Minutes to skip at the beginning.
 					</description>
 				</option>
-				<option flag="m" long-flag="mode" argument="string" unit="">
+				<option flag="m" long-flag="mode" argument="string" unit="" values="realtime,historic">
 					<description>
 					Playback mode: choose between 'realtime' and 'historic'
 					</description>
@@ -59,7 +59,8 @@
 				</option>
 				<option flag="u" long-flag="unlimited" argument="" unit="">
 					<description>
-					 Allow miniSEED records which are not 512 bytes.
+					Allow miniSEED records which are not 512 bytes. By default
+					seedlink supports 512 bytes only.
 					</description>
 				</option>
 			</group>
