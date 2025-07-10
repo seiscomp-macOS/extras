@@ -30,6 +30,9 @@ linkurl     = $linkurl
 ;; are available or desired, comment this entry out.
 liveurl    = $liveurl
 
+;; FDSNWS base URL.
+fdsnws_url = $fdsnws_url
+
 ;; refresh rate in seconds
 refresh	    = $refresh
 

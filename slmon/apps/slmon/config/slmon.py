@@ -37,7 +37,7 @@ class Module(seiscomp.kernel.Module):
     except: self.params['email'] = ""
 
     try: self.params['wwwdir'] = self.params['wwwdir'].replace("@ROOTDIR@", self.env.SEISCOMP_ROOT).replace("@NAME@", self.name)
-    except: self.params['wwwdir'] = os.path.join(self.env.SEISCOMP_ROOT, "var", "run", "slmon")
+    except: self.params['wwwdir'] = os.path.join(self.env.SEISCOMP_ROOT, "var", "run", self.name)
 
     # yet to be implemente correctly:
     # live seismograms, lin  in footer:
@@ -55,6 +55,10 @@ class Module(seiscomp.kernel.Module):
     # link to external site in footer
     try: self.params['linkurl']
     except: self.params['linkurl'] = "http://www.gfz-potsdam.de/geofon/"
+
+    # FDSNWS base url
+    try: self.params['fdsnws_url']
+    except: self.params['fdsnws_url'] = "http://localhost:8080/fdsnws/"
 
     return cfg
 
@@ -107,7 +111,7 @@ class Module(seiscomp.kernel.Module):
     self._readConfig()
     template_dir = os.path.join(self.env.SEISCOMP_ROOT, "share", "templates", self.name)
 
-    # Create purge_datafiles script
+    # Create config.ini
     tpl_paths = [template_dir]
     config_file = self.env.processTemplate('config.tpl', tpl_paths, self.params, True)
     if config_file:
@@ -116,7 +120,6 @@ class Module(seiscomp.kernel.Module):
       fd = open(os.path.join(self.config_dir, "config.ini"), "w")
       fd.write(config_file)
       fd.close()
-      os.chmod(os.path.join(self.config_dir, "config.ini"), 0o755)
     else:
       try: os.remove(os.path.join(self.config_dir, "config.ini"))
       except: pass

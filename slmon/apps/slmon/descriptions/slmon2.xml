@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <seiscomp>
-	<module name="slmon" category="Utilities" standalone="true">
+	<module name="slmon2" category="Utilities" standalone="true">
 		<description>SeedLink monitor creating web pages</description>
 		<configuration>
 			<parameter name="title" type="string" default="&quot;SeedLink Monitor&quot;">
@@ -60,9 +60,14 @@
 				Not mandatory.
 				</description>
 			</parameter>
+			<parameter name="fdsnws_url" type="string" default="http://localhost:8080/fdsnws/">
+				<description>
+				FDSNWS base URL. Used to get station coordinates.
+				</description>
+			</parameter>
 		</configuration>
 	</module>
-	<binding module="slmon">
+	<binding module="slmon2">
 		<configuration>
 			<parameter name="group" type="string" default="local">
 				<description>
