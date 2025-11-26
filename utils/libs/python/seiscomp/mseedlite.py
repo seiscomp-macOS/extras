@@ -6,13 +6,11 @@ the Free Software Foundation, either version 3 of the License, or
 any later version.
 
    :Copyright:
-       2005 Andres Heinloo, GEOFON, GFZ Potsdam <geofon@gfz-potsdam.de>
+       2005-2025 GFZ Helmholtz Centre for Geosciences
    :License:
        GPLv3
    :Platform:
        Linux
-
-.. moduleauthor:: Andres Heinloo <andres@gfz-potsdam.de>, GEOFON, GFZ Potsdam
 """
 
 from __future__ import absolute_import, division, print_function
@@ -20,7 +18,9 @@ from __future__ import absolute_import, division, print_function
 import datetime
 import struct
 import sys
-from io import BytesIO
+import re
+import io
+import json
 
 _FIXHEAD_LEN = 48
 _BLKHEAD_LEN = 4
@@ -75,6 +75,7 @@ class MSeedError(Exception):
 class MSeedNoData(MSeedError):
     """."""
 
+_rx_id = re.compile(r"^FDSN:([^_]*)_([^_]*)_([^_]*)_([^_]*)_([^_]*)_([^_]*)$")
 
 class Record(object):
     """Mini-SEED record."""
@@ -82,7 +83,7 @@ class Record(object):
     def __init__(self, src):
         """Create a Mini-SEED record from a file handle or a bitstream."""
         if type(src) == bytes:
-            fd = BytesIO(src)
+            fd = io.BytesIO(src)
         elif hasattr(src, "read"):
             fd = src
         else:
@@ -96,6 +97,203 @@ class Record(object):
             # FIXME Check if there is no better option, but NOT StopIteration!
             raise EndOfData
 
+        if fixhead[0:2] == b"MS":
+            if fixhead[2] == 3:
+                self.__init_ms3(fd, fixhead)
+
+            else:
+                raise MSeedError(f"unsupported version: {fixhead[2]}")
+
+        else:
+            self.formatversion = 2
+            self.__init_ms2(fd, fixhead)
+
+        if self.encoding not in (10, 11):
+            return
+
+        (self.X0, self.Xn) = struct.unpack(">ll", self.data[4:12])
+
+        (w0,) = struct.unpack(">L", self.data[:4])
+        (w3,) = struct.unpack(">L", self.data[12:16])
+        c3 = (w0 >> 24) & 0x3
+        d0 = None
+
+        if self.encoding == 10:
+            # """STEIM (1) Compression?"""
+            if c3 == 1:
+                d0 = (w3 >> 24) & 0xFF
+                if d0 > 0x7F:
+                    d0 -= 0x100
+            elif c3 == 2:
+                d0 = (w3 >> 16) & 0xFFFF
+                if d0 > 0x7FFF:
+                    d0 -= 0x10000
+            elif c3 == 3:
+                d0 = w3 & 0xFFFFFFFF
+                if d0 > 0x7FFFFFFF:
+                    d0 -= 0xFFFFFFFF
+                    d0 -= 1
+
+        elif self.encoding == 11:
+            # """STEIM (2) Compression?"""
+            if c3 == 1:
+                d0 = (w3 >> 24) & 0xFF
+                if d0 > 0x7F:
+                    d0 -= 0x100
+            elif c3 == 2:
+                dnib = (w3 >> 30) & 0x3
+                if dnib == 1:
+                    d0 = w3 & 0x3FFFFFFF
+                    if d0 > 0x1FFFFFFF:
+                        d0 -= 0x40000000
+                elif dnib == 2:
+                    d0 = (w3 >> 15) & 0x7FFF
+                    if d0 > 0x3FFF:
+                        d0 -= 0x8000
+                elif dnib == 3:
+                    d0 = (w3 >> 20) & 0x3FF
+                    if d0 > 0x1FF:
+                        d0 -= 0x400
+            elif c3 == 3:
+                dnib = (w3 >> 30) & 0x3
+                if dnib == 0:
+                    d0 = (w3 >> 24) & 0x3F
+                    if d0 > 0x1F:
+                        d0 -= 0x40
+                elif dnib == 1:
+                    d0 = (w3 >> 25) & 0x1F
+                    if d0 > 0xF:
+                        d0 -= 0x20
+                elif dnib == 2:
+                    d0 = (w3 >> 24) & 0xF
+                    if d0 > 0x7:
+                        d0 -= 0x10
+
+        if d0 is not None:
+            self.X_minus1 = self.X0 - d0
+        else:
+            self.X_minus1 = None
+
+        if (self.nframes is None) or (self.nframes == 0):
+            i = 0
+            self.nframes = 0
+            while i < len(self.data):
+                if self.data[i] == "\0":
+                    break
+
+                i += 64
+                self.nframes += 1
+
+    def __init_ms3(self, fd, fixhead):
+        (
+            self.formatversion,
+            self.flags,
+            bt_ns,
+            bt_year,
+            bt_doy,
+            bt_hour,
+            bt_minute,
+            bt_second,
+            self.encoding,
+            self.fsamp,
+            self.nsamp,
+            self.crc,
+            self.dataversion,
+            id_len,
+            extra_len,
+            payload_len,
+            ) = struct.unpack("<xxBBLHHBBBBdLLBBHL", fixhead[:40])
+
+        self.size = 40 + id_len + extra_len + payload_len
+
+        if self.size > len(fixhead):
+            data = fixhead + fd.read(self.size - len(fixhead))
+
+        else:
+            data = fixhead
+
+        if len(data) < 40 + id_len + extra_len:
+            raise MSeedError(f"record size inconsistency: {len(data)} < {40 + id_len + extra_len}")
+
+        self.header = data[ : 40 + id_len + extra_len]
+        self.data = data[40 + id_len + extra_len:]
+
+        if self.size != len(self.header) + len(self.data):
+            raise MSeedError(f"record size inconsistency: {self.size} != {len(self.header) + len(self.data)}")
+
+        self.id = data[40 : 40 + id_len].decode("utf-8")
+
+        try:
+            self.extra = json.loads(data[40+id_len:40+id_len+extra_len].decode("utf-8"))
+
+        except Exception as e:
+            raise MSeedError(f"invalid extra header: {self.extra}")
+
+        m = _rx_id.match(self.id)
+
+        if m is None:
+            raise MSeedError(f"unsupported ID: {self.id}")
+
+        # MS2 compatibility
+        self.recno = 0
+        self.rectype = "D"
+        self.net = m.group(1)
+        self.sta = m.group(2)
+        self.loc = m.group(3)
+        self.cha = m.group(4) + m.group(5) + m.group(6)
+        self.aflgs = 0
+        self.cflgs = 0
+        self.qflgs = 0
+        self.byteorder = 1
+        self.nframes = None
+        self.time_correction = 0
+
+        if self.fsamp == 0.0:
+            self.samprate_num = 0
+            self.samprate_denom = 0
+
+        else:
+            (self.samprate_num, self.samprate_denom) = float.as_integer_ratio(self.fsamp)
+
+        if self.samprate_denom == 1:
+            self.sr_factor = self.samprate_num
+            self.sr_mult = 1
+
+        else:
+            self.sr_factor = -self.samprate_denom
+            self.sr_mult = self.samprate_num
+
+        try:
+            self.time_quality = self.extra["FDSN"]["Time"]["Quality"]
+
+        except KeyError:
+            self.time_quality = -1
+
+        # quick fix to avoid exception from datetime
+        if bt_second > 59:
+            self.leap = bt_second - 59
+            bt_second = 59
+        else:
+            self.leap = 0
+
+        try:
+            (month, day) = _dy2mdy(bt_doy, bt_year)
+            self.begin_time = datetime.datetime(
+                bt_year, month, day, bt_hour, bt_minute, bt_second, bt_ns // 1000
+            )
+
+            self.nanoseconds = bt_ns % 1000
+
+            if (self.nsamp != 0) and (self.fsamp != 0):
+                msAux = 1000000 * self.nsamp / self.fsamp
+                self.end_time = self.begin_time + datetime.timedelta(microseconds=msAux)
+            else:
+                self.end_time = self.begin_time
+
+        except ValueError as e:
+            raise MSeedError(f"invalid time: {str(e)}")
+
+    def __init_ms2(self, fd, fixhead):
         if len(fixhead) < _FIXHEAD_LEN:
             raise MSeedError("unexpected end of header")
 
@@ -299,84 +497,14 @@ class Record(object):
         if len(self.header) + len(self.data) != self.size:
             raise MSeedError("internal error")
 
-        (self.X0, self.Xn) = struct.unpack(">ll", self.data[4:12])
-
-        (w0,) = struct.unpack(">L", self.data[:4])
-        (w3,) = struct.unpack(">L", self.data[12:16])
-        c3 = (w0 >> 24) & 0x3
-        d0 = None
-
-        if self.encoding == 10:
-            # """STEIM (1) Compression?"""
-            if c3 == 1:
-                d0 = (w3 >> 24) & 0xFF
-                if d0 > 0x7F:
-                    d0 -= 0x100
-            elif c3 == 2:
-                d0 = (w3 >> 16) & 0xFFFF
-                if d0 > 0x7FFF:
-                    d0 -= 0x10000
-            elif c3 == 3:
-                d0 = w3 & 0xFFFFFFFF
-                if d0 > 0x7FFFFFFF:
-                    d0 -= 0xFFFFFFFF
-                    d0 -= 1
-
-        elif self.encoding == 11:
-            # """STEIM (2) Compression?"""
-            if c3 == 1:
-                d0 = (w3 >> 24) & 0xFF
-                if d0 > 0x7F:
-                    d0 -= 0x100
-            elif c3 == 2:
-                dnib = (w3 >> 30) & 0x3
-                if dnib == 1:
-                    d0 = w3 & 0x3FFFFFFF
-                    if d0 > 0x1FFFFFFF:
-                        d0 -= 0x40000000
-                elif dnib == 2:
-                    d0 = (w3 >> 15) & 0x7FFF
-                    if d0 > 0x3FFF:
-                        d0 -= 0x8000
-                elif dnib == 3:
-                    d0 = (w3 >> 20) & 0x3FF
-                    if d0 > 0x1FF:
-                        d0 -= 0x400
-            elif c3 == 3:
-                dnib = (w3 >> 30) & 0x3
-                if dnib == 0:
-                    d0 = (w3 >> 24) & 0x3F
-                    if d0 > 0x1F:
-                        d0 -= 0x40
-                elif dnib == 1:
-                    d0 = (w3 >> 25) & 0x1F
-                    if d0 > 0xF:
-                        d0 -= 0x20
-                elif dnib == 2:
-                    d0 = (w3 >> 24) & 0xF
-                    if d0 > 0x7:
-                        d0 -= 0x10
-
-        if d0 is not None:
-            self.X_minus1 = self.X0 - d0
-        else:
-            self.X_minus1 = None
-
-        if (self.nframes is None) or (self.nframes == 0):
-            i = 0
-            self.nframes = 0
-            while i < len(self.data):
-                if self.data[i] == "\0":
-                    break
-
-                i += 64
-                self.nframes += 1
-
     def merge(self, rec):
         """Caller is expected to check for contiguity of data.
 
         Check if rec.nframes * 64 <= len(data)?
         """
+        if self.formatversion != 2:
+            raise MSeedError(f"merging version {self.formatversion} records is not implemented")
+
         (self.Xn,) = struct.unpack(">l", rec.data[8:12])
         self.data += rec.data[: rec.nframes * 64]
         self.nframes += rec.nframes
@@ -386,6 +514,9 @@ class Record(object):
 
     def write(self, fd, rec_len_exp):
         """Write the record to an already opened file."""
+        if self.formatversion != 2:
+            raise MSeedError(f"writing version {self.formatversion} records is not implemented")
+
         if self.size > (1 << rec_len_exp):
             raise MSeedError(
                 f"record is larger than requested write size: {self.size} > {1 << rec_len_exp}"
