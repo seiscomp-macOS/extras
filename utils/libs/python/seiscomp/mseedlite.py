@@ -248,14 +248,17 @@ class Record(object):
         self.nframes = None
         self.time_correction = 0
 
-        if self.fsamp == 0.0:
-            self.samprate_num = 0
-            self.samprate_denom = 0
+        (self.samprate_num, self.samprate_denom) = float.as_integer_ratio(self.fsamp)
 
-        else:
-            (self.samprate_num, self.samprate_denom) = float.as_integer_ratio(self.fsamp)
+        if self.fsamp < 0:  # negative sample rate represents period
+            self.fsamp = -1 / self.fsamp
+            (self.samprate_num, self.samprate_denom) = (self.samprate_denom, -self.samprate_num)
 
-        if self.samprate_denom == 1:
+        if self.samprate_num == 0:
+            self.sr_factor = 0
+            self.sr_mult = 0
+
+        elif self.samprate_denom == 1:
             self.sr_factor = self.samprate_num
             self.sr_mult = 1
 
