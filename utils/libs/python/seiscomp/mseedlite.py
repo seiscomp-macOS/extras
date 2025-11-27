@@ -75,7 +75,9 @@ class MSeedError(Exception):
 class MSeedNoData(MSeedError):
     """."""
 
+
 _rx_id = re.compile(r"^FDSN:([^_]*)_([^_]*)_([^_]*)_([^_]*)_([^_]*)_([^_]*)$")
+
 
 class Record(object):
     """Mini-SEED record."""
@@ -202,7 +204,7 @@ class Record(object):
             id_len,
             extra_len,
             payload_len,
-            ) = struct.unpack("<xxBBLHHBBBBdLLBBHL", fixhead[:40])
+        ) = struct.unpack("<xxBBLHHBBBBdLLBBHL", fixhead[:40])
 
         self.size = 40 + id_len + extra_len + payload_len
 
@@ -213,18 +215,24 @@ class Record(object):
             data = fixhead
 
         if len(data) < 40 + id_len + extra_len:
-            raise MSeedError(f"record size inconsistency: {len(data)} < {40 + id_len + extra_len}")
+            raise MSeedError(
+                f"record size inconsistency: {len(data)} < {40 + id_len + extra_len}"
+            )
 
-        self.header = data[ : 40 + id_len + extra_len]
-        self.data = data[40 + id_len + extra_len:]
+        self.header = data[: 40 + id_len + extra_len]
+        self.data = data[40 + id_len + extra_len :]
 
         if self.size != len(self.header) + len(self.data):
-            raise MSeedError(f"record size inconsistency: {self.size} != {len(self.header) + len(self.data)}")
+            raise MSeedError(
+                f"record size inconsistency: {self.size} != {len(self.header) + len(self.data)}"
+            )
 
         self.id = data[40 : 40 + id_len].decode("utf-8")
 
         try:
-            self.extra = json.loads(data[40+id_len:40+id_len+extra_len].decode("utf-8"))
+            self.extra = json.loads(
+                data[40 + id_len : 40 + id_len + extra_len].decode("utf-8")
+            )
 
         except Exception as e:
             raise MSeedError(f"invalid extra header: {self.extra}")
@@ -252,7 +260,10 @@ class Record(object):
 
         if self.fsamp < 0:  # negative sample rate represents period
             self.fsamp = -1 / self.fsamp
-            (self.samprate_num, self.samprate_denom) = (self.samprate_denom, -self.samprate_num)
+            (self.samprate_num, self.samprate_denom) = (
+                self.samprate_denom,
+                -self.samprate_num,
+            )
 
         if self.samprate_num == 0:
             self.sr_factor = 0
@@ -506,7 +517,9 @@ class Record(object):
         Check if rec.nframes * 64 <= len(data)?
         """
         if self.formatversion != 2:
-            raise MSeedError(f"merging version {self.formatversion} records is not implemented")
+            raise MSeedError(
+                f"merging version {self.formatversion} records is not implemented"
+            )
 
         (self.Xn,) = struct.unpack(">l", rec.data[8:12])
         self.data += rec.data[: rec.nframes * 64]
@@ -518,7 +531,9 @@ class Record(object):
     def write(self, fd, rec_len_exp):
         """Write the record to an already opened file."""
         if self.formatversion != 2:
-            raise MSeedError(f"writing version {self.formatversion} records is not implemented")
+            raise MSeedError(
+                f"writing version {self.formatversion} records is not implemented"
+            )
 
         if self.size > (1 << rec_len_exp):
             raise MSeedError(
